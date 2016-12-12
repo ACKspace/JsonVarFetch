@@ -1,0 +1,19 @@
+{
+"name": "JsonVarFetch",
+"frameworks": "Arduino",
+"keywords": "JSON, parser",
+"description": "Fetch variables from JSON by a given path",
+"authors":
+[
+    {
+        "name": "xopr",
+        "email": "xopr@ackapce.nl",
+        "maintainer": true
+    },
+],
+"repository":
+{
+    "type": "git",
+    "url": "https://github.com/ACKspace/JsonVarFetch"
+}
+}

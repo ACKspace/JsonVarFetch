@@ -1,0 +1,31 @@
+#######################################
+# Syntax Coloring Map For JsonVarFetch
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+JsonVarFetch	    KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+processCharacter    KEYWORD2
+
+#######################################
+# Instances (KEYWORD2)
+#######################################
+ParseStatus         KEYWORD2
+Enum                KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+AllocationError         LITERAL1
+ParserError             LITERAL1
+JsonError               LITERAL1
+Ok                      LITERAL1
+Complete                LITERAL1
+CompletePartialResult   LITERAL1
+CompleteFullResult      LITERAL1
+
