@@ -3,10 +3,9 @@
 
 #define DEBUG
 #define INFO
-#define VERBOSE
-
-
-//#define INSANE
+//#define DETAIL
+//#define VERBOSE
+#define INSANE
 
 #define UINT_S uint16_t
 #define UINT_ uint16_t
@@ -106,6 +105,8 @@ class JsonVarFetch
 
 #ifdef DEBUG
         void                _printDebugData( ParserState _eParserState );
+        void                printParseStatus( ParseStatus _parseStatus );
+
         void                print( char* _strMessage );
 #endif
 

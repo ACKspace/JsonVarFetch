@@ -4,10 +4,9 @@
 // strlen strncmp memcpy
 #include <string.h>
 #include <stdint.h>
-
+//#include <assert.h>
 // cout
 #include "iostream"
-
 
 // http://www.geeksforgeeks.org/implement-itoa/
 void strreverse(char str[], int length)
@@ -132,7 +131,6 @@ JsonVarFetch::JsonVarFetch( const char* _arrQueries[], uint8_t _nQueries, char* 
         // Initialize the path match length(depth) as 1: a query has at least 1 identifier level
         arrPathMatchLength[ nQuery ] = 1;
 
-        // TODO: 255 is incorrect: use UINT_S_MAX
         while ( nChar < UINT_MAX && _arrQueries[ nQuery ][ nChar ] )
         {
             switch ( _arrQueries[ nQuery ][ nChar ] )
@@ -182,49 +180,95 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
     UINT_S nValueLen;
     ParseStatus eParseStatus;
 
+#if defined(DEBUG) && defined(INSANE)
+    cout << _c << ": ";
+#endif
+
     if ( m_eMatchineIdentifier == ParseStatus::CompleteFullResultDone )
+    {
         return m_eMatchineIdentifier;
+#if defined(DEBUG) && defined(INSANE)
+        cout << "(Already done)" << endl;
+#endif
+    }
 
     switch ( this->_peekState( ) )
     {
         case ParserState::Uninitialized:
             // New JSON object, allow 'whitespace' but expect '{'
             if ( _isWhiteSpace( _c ) )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (object START whitespace)" << endl;
+#endif
                 return ParseStatus::Ok;
+            }
 
             if ( _c != '{' )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "JsonError (object START)" << endl;
+#endif
                 return ParseStatus::JsonError;
+            }
 
             // JSON starts as an object
             this->_pushState( ParserState::Object );
+#if defined(DEBUG) && defined(INSANE)
+            cout << "Ok (object START)" << endl;
+#endif
             return ParseStatus::Ok;
 
         case ParserState::Object:
             // Object, allow 'whitespace' but expect '\"'
             if ( _isWhiteSpace( _c ) )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (object identifier whitespace)" << endl;
+#endif
                 return ParseStatus::Ok;
+            }
 
             if ( _c != '\"' )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "JsonError (object identifier)" << endl;
+#endif
                 return ParseStatus::JsonError;
+            }
 
             // Start of pair
             this->_pushState( ParserState::Pair );
+#if defined(DEBUG) && defined(INSANE)
+            cout << "Ok (object identifier)" << endl;
+#endif
             return ParseStatus::Ok;
 
         case ParserState::Array:
             // Should not reach this (Array is always immediately followed by Value on the stack
+#if defined(DEBUG) && defined(INSANE)
+            cout << "ParserError (array)" << endl;
+#endif
             return ParseStatus::ParserError;
 
         case ParserState::Value:
             // Value, allow 'whitespace'
             if ( _isWhiteSpace( _c ) )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (whitespace value)" << endl;
+#endif
                 return ParseStatus::Ok;
+            }
 
             // Determine what incoming character we have
             switch ( _c )
             {
                 case '{':
                     this->_swapState( ParserState::Object );
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "Ok (object push value)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 case '[':
@@ -249,11 +293,21 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                     m_eMatchineIdentifier = this->_checkCompleteIdentifier();
                     this->m_strValue[ 0 ] = 0;
 
+#if defined(DEBUG) && defined(INSANE)
+                    printParseStatus( m_eMatchineIdentifier );
+                    cout << " (array push value)" << endl;
+#endif
                     return m_eMatchineIdentifier;
                     //return ParseStatus::Ok;
 
                 case '\"':
+#ifdef DEBUG
+                    this->_printDebugData( ParserState::Uninitialized );
+#endif
                     this->_swapState( ParserState::String );
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "Ok (string value)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 case 't': // true
@@ -263,17 +317,25 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                     // Add special value to the identifier string
                     // TODO: only if complete and matching identifier
 #ifdef DEBUG
-                    dummy();
+                    //dummy();
 #endif
                     if ( m_eMatchineIdentifier >= ParseStatus::CompletePartialResult && !this->_addCharacterToIdentifier( _c ) )
                     {
 #ifdef DEBUG
                         print( (char*)"E: Value, primitive" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "AllocationError (primitive value)" << endl;
+#endif
                         return ParseStatus::AllocationError;
                     }
 
                     this->_swapState( ParserState::Special );
+#if defined(DEBUG) && defined(INSANE)
+                    printParseStatus( m_eMatchineIdentifier );
+                    //cout << "Ok";
+                    cout << " (primitive value)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 case '-':
@@ -294,31 +356,48 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 #ifdef DEBUG
                         print( (char*)"E: Value, number" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "AllocationError (digit value)" << endl;
+#endif
                         return ParseStatus::AllocationError;
                     }
 
                     // Switch to number mode
                     this->_swapState( ParserState::Number );
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "Ok (digit value)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 default:
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "ParserError (digit value)" << endl;
+#endif
                     return ParseStatus::ParserError;
             }
 
         case ParserState::String:
             if ( _c == '\"' )
             {
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                 this->_printDebugData( this->_peekState( ) );
 #endif
                 // If complete
                 eParseStatus = this->_checkCompleteValue( );
-                if ( eParseStatus < ParseStatus::Ok )
-                    return eParseStatus;
                 this->m_strValue[ 0 ] = 0;
+                if ( eParseStatus < ParseStatus::Ok )
+                {
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "Not Ok (string)" << endl;
+#endif
+                    return eParseStatus;
+                }
 
                 // String complete
                 this->_swapState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (string)" << endl;
+#endif
                 return ParseStatus::Ok;
             }
 
@@ -329,12 +408,19 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 #ifdef DEBUG
                 print( (char*)"E: String" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                cout << "AllocationError (string)" << endl;
+#endif
                 return ParseStatus::AllocationError;
             }
 
             if ( m_eMatchineIdentifier == ParseStatus::CompleteFullResult )
                 m_eMatchineIdentifier = ParseStatus::CompleteFullResultDone;
 
+#if defined(DEBUG) && defined(INSANE)
+            printParseStatus( m_eMatchineIdentifier );
+            cout << " (string)" << endl;
+#endif
             return m_eMatchineIdentifier;
             //return ParseStatus::Ok;
 
@@ -342,7 +428,7 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
             if ( _c == '\"' )
             {
 #ifdef DEBUG
-                this->_printDebugData( ParserState::Identifier );
+                this->_printDebugData( ParserState::Pair );
 #endif
 
                 // Match complated string identifier with the current identifiers
@@ -351,6 +437,10 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 
                 // Pair identifier complete
                 this->_swapState( ParserState::Identifier );
+#if defined(DEBUG) && defined(INSANE)
+                printParseStatus( m_eMatchineIdentifier );
+                cout << " (pair identifier complete)" << endl;
+#endif
                 return m_eMatchineIdentifier;
                 //return ParseStatus::Ok;
             }
@@ -364,21 +454,40 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 #ifdef DEBUG
                 print( (char*)"E: Identifier" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                cout << "AllocationError (pair identifier)" << endl;
+#endif
                 return ParseStatus::AllocationError;
             }
+#endif
+#if defined(DEBUG) && defined(INSANE)
+            cout << "Ok (pair identifier)" << endl;
 #endif
             return ParseStatus::Ok;
 
         case ParserState::Identifier:
             // Identifier waiting on colon, allow 'whitespace'
             if ( _isWhiteSpace( _c ) )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (identifier whitespace)" << endl;
+#endif
                 return ParseStatus::Ok;
+            }
 
             // No colon; this should not happen
             if ( _c != ':' )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "JsonError (identifier colon)" << endl;
+#endif
                 return ParseStatus::JsonError;
+            }
 
             this->_swapState( ParserState::Value );
+#if defined(DEBUG) && defined(INSANE)
+            cout << "Ok (identifier colon)" << endl;
+#endif
             return ParseStatus::Ok;
 
         case ParserState::Number:
@@ -408,33 +517,48 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                 case '9':
                 case '.':
                     // TODO: only if complete and matching identifier
-                    if ( m_eMatchineIdentifier >= ParseStatus::Complete && !this->_addCharacterToIdentifier( _c ) )
+                    if ( m_eMatchineIdentifier >= ParseStatus::CompletePartialResult && !this->_addCharacterToIdentifier( _c ) )
                     {
 #ifdef DEBUG
                         print( (char*)"E: Number" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "AllocationError (digit number)" << endl;
+#endif
                         return ParseStatus::AllocationError;
                     }
 
+#if defined(DEBUG) && defined(INSANE)
+                    printParseStatus( m_eMatchineIdentifier );
+                    cout << " (digit number)" << endl;
+#endif
                     return m_eMatchineIdentifier;
                     //return ParseStatus::Ok;
 
                 case ',':
                     // Immediate next value/pair
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (next segment number)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     this->_popState( );
                     switch ( this->_peekState( ) )
                     {
                         case ParserState::Object:
                             // If we are iterating an Object, do nothing so we can accept Pair mode
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (object next segment number)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         case ParserState::Array:
@@ -454,24 +578,35 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                             if ( m_eMatchineIdentifier == ParseStatus::CompleteFullResult )
                                 m_eMatchineIdentifier = ParseStatus::CompleteFullResultDone;
 
+#if defined(DEBUG) && defined(INSANE)
+                            printParseStatus( m_eMatchineIdentifier );
+                            cout << " (array next segment number)" << endl;
+#endif
                             return m_eMatchineIdentifier;
                             //return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (next segment number)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
                 case '}':
                     // Tear down the stack (object)
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
-
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (object pop number)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     // Pop Number
                     this->_popState( );
@@ -482,22 +617,33 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                         case ParserState::Object:
                             // End of array, ready for a new segment (on its parent)
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (object pop number)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (object pop number)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
                 case ']':
                     // Tear down the stack (array)
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (array pop number)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     // Pop Number
                     this->_popState( );
@@ -512,9 +658,15 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                             this->m_nIterator = (uint8_t)this->_popState( );
 
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (array pop number)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (array pop number)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
@@ -523,19 +675,30 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                 case '\n':
                 case '\r':
                     // Whitespace finishes value, ready for next segment
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (whitespace number)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     this->_swapState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "Ok (whitespace number)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 default:
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "JsonError (whitespace number)" << endl;
+#endif
                     return ParseStatus::JsonError;
             }
 
@@ -562,34 +725,63 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                 case 's':
                     // Add special value to the identifier string
                     // TODO: only if complete and matching identifier
-                    if ( m_eMatchineIdentifier >= ParseStatus::Complete && !this->_addCharacterToIdentifier( _c ) )
+                    if ( m_eMatchineIdentifier >= ParseStatus::CompletePartialResult && !this->_addCharacterToIdentifier( _c ) )
                     {
 #ifdef DEBUG
                         print( (char*)"E: Special, primitive" );
 #endif
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Allocation Error (primitive special)" << endl;
+#endif
                         return ParseStatus::AllocationError;
                     }
 
-                    return m_eMatchineIdentifier;
-                    //return ParseStatus::Ok;
+#if defined(DEBUG) && defined(INSANE)
+                    printParseStatus( m_eMatchineIdentifier );
+                    //cout << "Ok";
+                    cout << " (primitive special)" << endl;
+#endif
+                    //return m_eMatchineIdentifier;
+                    return ParseStatus::Ok;
 
                 case ',':
                     // Immediate next value/pair
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (next segment special)" << endl;
+#endif
+                        return eParseStatus;
+                    }
+
+#if defined(DEBUG) && defined(INSANE)
+/*
+            cout << "QUERY 1 DEBUG ";
+            for ( uint8_t nMatch = 0; nMatch < QUERY_DEPTH; nMatch++ )
+            {
+                cout << unsigned(this->m_arrPathMatches[ QUERY_DEPTH * 1 + nMatch ]) << " ";
+            }
+*/
+#endif
 
                     this->_popState( );
                     switch ( this->_peekState( ) )
                     {
                         case ParserState::Object:
                             // If we are iterating an Object, do nothing so we can accept Pair mode
-                            return ParseStatus::Ok;
+                            //m_eMatchineIdentifier = this->_checkCompleteIdentifier();
+
+#if defined(DEBUG) && defined(INSANE)
+                            printParseStatus( m_eMatchineIdentifier ); //m_eMatchineIdentifier  eParseStatus
+                            cout << " (object next segment special)" << endl;
+#endif
+                            return m_eMatchineIdentifier;//ParseStatus::Ok;
 
                         case ParserState::Array:
                             // If we are iterating an Array, increase the iterator and switch to Value mode
@@ -604,23 +796,35 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                             this->m_strValue[ 0 ] = 0;
 
                             this->_pushState( ParserState::Value );
+#if defined(DEBUG) && defined(INSANE)
+                            printParseStatus( m_eMatchineIdentifier );
+                            cout << " (array next segment special)" << endl;
+#endif
                             return m_eMatchineIdentifier;
                             //return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (next segment special)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
                 case '}':
                     // Tear down the stack (object)
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (object pop special)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     // Pop Number
                     this->_popState( );
@@ -631,22 +835,33 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                         case ParserState::Object:
                             // End of array, ready for a new segment (on its parent)
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (object pop special)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (object pop special)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
                 case ']':
                     // Tear down the stack (array)
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (array pop special)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     // Pop Number
                     this->_popState( );
@@ -661,9 +876,15 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 
                             // End of array, ready for a new segment (on its parent)
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (array pop special)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (array special)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
@@ -672,25 +893,41 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                 case '\n': // newline
                 case '\r': // return
                     // Whitespace finishes value, ready for next segment
-#ifdef DEBUG
+#if defined(DEBUG) && defined(DETAIL)
                     this->_printDebugData( this->_peekState( ) );
 #endif
                     // If complete
                     eParseStatus = this->_checkCompleteValue( );
-                    if ( eParseStatus < ParseStatus::Ok )
-                        return eParseStatus;
                     this->m_strValue[ 0 ] = 0;
+                    if ( eParseStatus < ParseStatus::Ok )
+                    {
+#if defined(DEBUG) && defined(INSANE)
+                        cout << "Not Ok (complete value whitespace special)" << endl;
+#endif
+                        return eParseStatus;
+                    }
 
                     this->_swapState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (whitespace special)" << endl;
+#endif
                     return ParseStatus::Ok;
 
                 default:
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "JsonError (unhandled special)" << endl;
+#endif
                     return ParseStatus::JsonError;
             }
 
         case ParserState::NextSegment:
             if ( _isWhiteSpace( _c ) )
+            {
+#if defined(DEBUG) && defined(INSANE)
+                cout << "Ok (whitespace)" << endl;
+#endif
                 return ParseStatus::Ok;
+            }
 
             // Determine what incoming character we have
             switch ( _c )
@@ -706,9 +943,15 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                         case ParserState::Object:
                             // End of array, ready for a new segment (on its parent)
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (object pop)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (not an object)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
@@ -727,9 +970,15 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 
                             // End of array, ready for a new segment (on its parent)
                             this->_pushState( ParserState::NextSegment );
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (array pop)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (not an array)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
@@ -740,6 +989,9 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
                     {
                         case ParserState::Object:
                             // If we are iterating an Object, do nothing so we can accept Pair mode
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "Ok (object next segment)" << endl;
+#endif
                             return ParseStatus::Ok;
 
                         case ParserState::Array:
@@ -756,20 +1008,36 @@ ParseStatus JsonVarFetch::processCharacter( char _c )
 
                             this->_pushState( ParserState::Value );
 
+#if defined(DEBUG) && defined(INSANE)
+                            printParseStatus( m_eMatchineIdentifier );
+                            cout << " (array next segment)" << endl;
+#endif
                             return m_eMatchineIdentifier;
                             //return ParseStatus::Ok;
 
                         default:
+#if defined(DEBUG) && defined(INSANE)
+                            cout << "JsonError (next segment without object or array)" << endl;
+#endif
                             return ParseStatus::JsonError;
                     }
 
                 default:
+#if defined(DEBUG) && defined(INSANE)
+                    cout << "ParserError (unknown char in NextSegment)" << endl;
+#endif
                     return ParseStatus::ParserError;
             }
 
+#if defined(DEBUG) && defined(INSANE)
+            cout << "Ok ()" << endl;
+#endif
             return ParseStatus::Ok;
 
         default:
+#if defined(DEBUG) && defined(INSANE)
+            cout << "ParserError (unknown parser state)" << endl;
+#endif
             return ParseStatus::ParserError;
     }
 };
@@ -925,6 +1193,13 @@ bool JsonVarFetch::_addCharacterToIdentifier( char _c )
     if ( nValueLen >= sizeof( this->m_strValue ) )
         return false;
 
+/*
+#if defined(DEBUG) && defined(INSANE)
+    // note: inline
+    cout << "adding [" << _c << "] at index [" << nValueLen << "]";
+#endif
+*/
+
     // Add character and string termination
     this->m_strValue[ nValueLen++ ] = _c;
     this->m_strValue[ nValueLen ] = 0;
@@ -960,6 +1235,15 @@ ParseStatus JsonVarFetch::_checkCompleteIdentifier( )
     ParseStatus status = ParseStatus::Ok;
     uint8_t nMatchCount = 0;
 
+    bool bDebug = false;
+#ifdef DEBUG
+    if ( !strncmp( this->m_strValue, "open", 4 ) && !nCurrentLevel )
+    {
+        dummy();
+        bDebug = true;
+    }
+#endif
+
     // Assume we have no matches on this complete identifier
     //m_bMatchingIdentifier = false;
 
@@ -969,12 +1253,30 @@ ParseStatus JsonVarFetch::_checkCompleteIdentifier( )
         // Get the index determined upon initialization time
         nMatchStartPos = this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nCurrentLevel ];
 
+#ifdef DEBUG
+        if ( bDebug )
+        {
+            cout << "\n################ Testing ################" << endl;
+            cout << "nQuery        : " << unsigned( nQuery ) << endl;
+            cout << "nCurrentLevel : " << unsigned( nCurrentLevel ) << endl;
+            cout << "nMatchStartPos: ";
+            for ( uint8_t nMatch = 0; nMatch < QUERY_DEPTH; nMatch++ )
+            {
+                cout << unsigned(this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nMatch ]) << " ";
+            }
+            cout << endl;
+        }
+#endif
+
         // Continue to the next query if the value is already found
         if ( nMatchStartPos == UINT_MAX )
         {
             // If the next is 0: it is a full match (already found), flag
             if ( nCurrentLevel < QUERY_DEPTH && this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nCurrentLevel + 1 ] == 0 )
             {
+#ifdef DEBUG
+                print( (char*)"Old match\n" );
+#endif
                 // CompleteFullResult if 'ok' || Complete
                 if ( status < ParseStatus::Complete )
                     status = ParseStatus::Complete;
@@ -1011,14 +1313,38 @@ ParseStatus JsonVarFetch::_checkCompleteIdentifier( )
         // If the next is 0 (terminator): it is a full match, flag
         if ( nCurrentLevel < QUERY_DEPTH && this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nCurrentLevel + 1 ] == 0 )
         {
-            status = ParseStatus::CompletePartialResult;
+#ifdef DEBUG
+            //print( (char*)"Full match!\n" );
+#endif
+#if defined(DEBUG) && defined(INSANE)
+            cout << "FULL MATCH ";
+            for ( uint8_t nMatch = 0; nMatch < QUERY_DEPTH; nMatch++ )
+            {
+                cout << unsigned(this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nMatch ]) << " ";
+            }
+#endif
 
-            // HACK: early out so we don't do old matches
-            //return status;
+            status = ParseStatus::CompletePartialResult;
 
             //m_bMatchingIdentifier = true;
             nMatchCount++;
         }
+
+#ifdef DEBUG
+        if ( bDebug )
+        {
+            cout << "################ after ################" << endl;
+            cout << "nQuery        : " << unsigned( nQuery ) << endl;
+            cout << "nCurrentLevel : " << unsigned( nCurrentLevel ) << endl;
+            cout << "nMatchStartPos: ";
+            for ( uint8_t nMatch = 0; nMatch < QUERY_DEPTH; nMatch++ )
+            {
+                cout << unsigned(this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nMatch ]) << " ";
+            }
+            cout << endl;
+        }
+#endif
+
 
     }
 
@@ -1026,6 +1352,12 @@ ParseStatus JsonVarFetch::_checkCompleteIdentifier( )
     if ( m_nQueries == nMatchCount )
         status = ParseStatus::CompleteFullResult;
 
+#ifdef DEBUG
+        if ( bDebug )
+        {
+            cout << "################ done ################\n" << endl;
+        }
+#endif
     return status;
 };
 
@@ -1048,19 +1380,37 @@ ParseStatus JsonVarFetch::_checkCompleteValue( )
     // Check if the amout of pathmatches is the same as the level - 1 we have
     for ( uint8_t nQuery = 0; nQuery < this->m_nQueries; nQuery++ )
     {
+#if defined(DEBUG) && defined(INSANE)
+        cout << "Q" << unsigned( nQuery ) << ": ";
+#endif
+
         // Not yet found or already completed
         if ( this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nCurrentLevel ] != UINT_MAX )
+        {
+#if defined(DEBUG) && defined(INSANE)
+            cout << "not found or already completed ";
+#endif
             continue;
+        }
 
         // This identifier is not our target: we have to go deeper, so skip for now
         if ( nCurrentLevel < QUERY_DEPTH && this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nCurrentLevel + 1 ] != 0 )
+        {
+#if defined(DEBUG) && defined(INSANE)
+            cout << "not our target ";
+#endif
             continue;
+        }
+
+#if defined(DEBUG) && defined(INSANE)
+        cout << "MATCH [" << this->m_strValue << "] ";
+#endif
 
         // We have a match!
         // Clear the whole query matches so we don't match it again
-        for ( uint8_t nPathPart = 0; nPathPart < nCurrentLevel; nCurrentLevel++ )
+        for ( uint8_t nPathPart = 0; nPathPart < QUERY_DEPTH/*nCurrentLevel*/; nPathPart++ )
         {
-            this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nPathPart + 1 ] = 0;
+            this->m_arrPathMatches[ QUERY_DEPTH * nQuery + nPathPart ] = 0;
         }
 
         // Set the nQuery'th string (note that strings are suffixed with a 'zero'; make room if we have to
@@ -1069,11 +1419,15 @@ ParseStatus JsonVarFetch::_checkCompleteValue( )
         for ( UINT_S nStringIndex = 0; nStringIndex < nQuery; nStringIndex++ )
         {
             nCurrentResultLength = strlen( this->m_strResult + nStringOffset );
+
             nStringOffset += ( nCurrentResultLength + 1 );
             /* NEW
             nStringOffset += ( strlen( this->m_strResult + nStringOffset ) + 1 );
             */
         }
+#if defined(DEBUG) && defined(INSANE)
+        cout << "offset " << unsigned( nStringOffset ) << " ";
+#endif
 
         // Check if the current value fits in the given space
         if ( nStringOffset + nValueLength >= this->m_nMaxLen )
@@ -1108,8 +1462,12 @@ ParseStatus JsonVarFetch::_checkCompleteValue( )
             }
         }
 
+#if defined(DEBUG) && defined(INSANE)
+        cout << "shift " << unsigned( nValueLength ) << " to the right @ " << unsigned( this->m_nMaxLen - nValueLength - 2 ) << " (" << unsigned( this->m_nMaxLen ) << ") ";
+#endif
+
         // Make some room for the current result by shifting the next bytes to the right
-        for ( UINT_S nResult = this->m_nMaxLen - nValueLength - 2; nResult >= nValueLength - 1; nResult-- )
+        for ( UINT_S nResult = this->m_nMaxLen - nValueLength - 2; nResult >= nStringOffset + 1; nResult-- )
         {
             // Shift the characters
             this->m_strResult[ nResult + nValueLength ] = this->m_strResult[ nResult ];
@@ -1118,6 +1476,17 @@ ParseStatus JsonVarFetch::_checkCompleteValue( )
         // Copy over the value including terminating zero
         memcpy( this->m_strResult + nStringOffset, this->m_strValue, nValueLength + 1 );
     }
+
+#if defined(DEBUG) && defined(INSANE)
+    cout << "RESULTS: ";
+
+    nValueLength = 0;
+    for ( uint8_t nQuery = 0; nQuery < this->m_nQueries; nQuery++ )
+    {
+        cout << "[" << this->m_strResult + nValueLength << "] ";
+        nValueLength += strlen( this->m_strResult ) + 1;
+    }
+#endif
 
     // Success
     // TODO: check the number of results.., return Complete, CompletePartialResult or CompleteFullResult
@@ -1133,13 +1502,21 @@ ParseStatus JsonVarFetch::_checkCompleteValue( )
  */
 void JsonVarFetch::_printDebugData( ParserState _eParserState )
 {
-#if defined(INFO) || defined(VERBOSE)
+#if defined(INSANE)
+    return;
+#endif
 
-    char strNumber[ 10 ];
 
+#if defined(INFO)
     print( (char*)"strValue: [" );
     print( this->m_strValue );
     print( (char*)"]\n" );
+#endif
+
+#if defined(INSANE)
+
+    char strNumber[ 10 ];
+
 
     print( (char*)"iterator: " );
     itoa( m_nIterator, strNumber, 10 );
@@ -1153,7 +1530,9 @@ void JsonVarFetch::_printDebugData( ParserState _eParserState )
     itoa( m_nStateSize, strNumber, 10 );
     print( strNumber );
     print( (char*)")\n" );
+#endif
 
+#if defined(VERBOSE)
     print( (char*)"ParserState: " );
     switch ( _eParserState )
     {
@@ -1207,44 +1586,48 @@ void JsonVarFetch::_printDebugData( ParserState _eParserState )
     }
 
     print( (char*)"Match identifier: " );
-    switch ( m_eMatchineIdentifier )
-    {
-        case ParseStatus::AllocationError:
-            print( (char*)"AllocationError\n" );
-            break;
-
-        case ParseStatus::ParserError:
-            print( (char*)"ParserError\n" );
-            break;
-
-        case ParseStatus::JsonError:
-            print( (char*)"JsonError\n" );
-            break;
-
-        case ParseStatus::Ok:
-            print( (char*)"Ok\n" );
-            break;
-
-        case ParseStatus::Complete:
-            print( (char*)"Complete\n" );
-            break;
-
-        case ParseStatus::CompletePartialResult:
-            print( (char*)"CompletePartialResult\n" );
-            break;
-
-        case ParseStatus::CompleteFullResult:
-            print( (char*)"CompleteFullResult\n" );
-            break;
-
-        default:
-            print( (char*)"Unknown\n" );
-            break;
-    }
-
+    printParseStatus( m_eMatchineIdentifier );
     print( (char*)"\n" );
 
 #endif
+};
+
+void JsonVarFetch::printParseStatus( ParseStatus _parseStatus )
+{
+    switch ( _parseStatus )
+    {
+        case ParseStatus::AllocationError:
+            print( (char*)"AllocationError" );
+            break;
+
+        case ParseStatus::ParserError:
+            print( (char*)"ParserError" );
+            break;
+
+        case ParseStatus::JsonError:
+            print( (char*)"JsonError" );
+            break;
+
+        case ParseStatus::Ok:
+            print( (char*)"Ok" );
+            break;
+
+        case ParseStatus::Complete:
+            print( (char*)"Complete" );
+            break;
+
+        case ParseStatus::CompletePartialResult:
+            print( (char*)"CompletePartialResult" );
+            break;
+
+        case ParseStatus::CompleteFullResult:
+            print( (char*)"CompleteFullResult" );
+            break;
+
+        default:
+            print( (char*)"Unknown" );
+            break;
+    }
 };
 
 /**
