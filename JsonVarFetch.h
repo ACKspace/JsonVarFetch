@@ -1,7 +1,7 @@
 #ifndef JSON_VAR_FETCH_H
 #define JSON_VAR_FETCH_H
 
-#define DEBUG
+//#define DEBUG
 #define INFO
 //#define DETAIL
 //#define VERBOSE
@@ -108,6 +108,10 @@ class JsonVarFetch
         void                printParseStatus( ParseStatus _parseStatus );
 
         void                print( char* _strMessage );
+        void                print( char _c );
+        void                print( uint8_t _n );
+        void                print( int8_t _n );
+        void                print( UINT_S _n );
 #endif
 
 };
